@@ -185,7 +185,7 @@ export default class BlockchainHelper {
         return undefined;
     }    
 
-    transactContractMethod(caller, operationName, operation, parameters, callBack) {
+    transactContractMethod(caller, context, operation, parameters, callBack) {
         web3.eth.getGasPrice((err, gasPrice) => {
             if(err) {
                 gasPrice = DEFAULT_GAS_PRICE;
@@ -195,7 +195,7 @@ export default class BlockchainHelper {
             let estimateParams = parameters.slice()
             estimateParams.push((estimateError,estimatedGas) => {
                 if(estimateError) {
-                    callBack(caller, estimateError,operationName);
+                    callBack(caller, estimateError,context);
                     return;
                 }
                 
@@ -206,15 +206,15 @@ export default class BlockchainHelper {
                 });
                 parameters.push((error, txnHash) => {
                     if(error) {
-                        callBack(caller, error,operationName);
+                        callBack(caller, error,context);
                     }
                     else {
                         console.log("Txn Hash for approved transaction is : " + txnHash);
                         this.waitForTransaction(txnHash).then(receipt => {
-                            callBack(caller, undefined,operationName);
+                            callBack(caller, undefined,context);
                         })
                         .catch((txError) => {
-                            callBack(caller, txError,operationName);
+                            callBack(caller, txError,context);
                         })
                     }
                 });

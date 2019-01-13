@@ -31,9 +31,7 @@ export class Profile extends Component {
       escrowaccountbalance: 0,
       allowedtokenbalance:[],
       value: 0, 
-      authorizeAmount: 0,
-      depositAmount: 0,
-      withdrawalAmount: 0,
+      mpeAmount: 0,
       userprofile: [],
       userAddress: '',
       account: '',
@@ -41,8 +39,8 @@ export class Profile extends Component {
       extexp: 0,
       openchaining: false,
       chainId: undefined,
-      contractError: '',
-      channelExtendAddError:'',
+      mpeMessage: '',
+      channelExtendAddMessage:'',
     }
 
     this.account = undefined;
@@ -182,7 +180,7 @@ export class Profile extends Component {
   }
 
   handleChange(value) {
-    this.setState({contractError:''})
+    this.setState({mpeMessage:''})
     this.setState({ value });
   };
 
@@ -200,74 +198,70 @@ export class Profile extends Component {
     this.setState({[name]: value,})
   }
 
-  transactCallBack(caller, error, operationName) {
+  transactCallBack(caller, error, context) {
+    let messageField = (context.operationName === 'channelExtendAndAddFunds') ? channelExtendAddMessage : mpeMessage;
     if(typeof error !== 'undefined') {
-        if(operationName === 'channelExtendAndAddFunds') {
-            caller.processError(error, "channelExtendAddError")
-        }
-        else {
-            caller.processError(error, "contractError")
-        }
+        caller.processError(error, messageField)
     }
     else {
+        caller.setState({[messageField]:"Transaction was successful. Latest values will reflect shortly"})
         caller.nextJobStep();
         caller.loadAGIBalances(caller.state.chainId);        
     }
   }
 
   handleAuthorize() {
-    this.setState({contractError:''})
+    this.setState({mpeMessage:''})
     if (typeof web3 === 'undefined') {
       return;
     }
 
     let instanceTokenContract = this.network.getTokenInstance(this.state.chainId);
-    var amountInCogs = AGI.inCogs(web3, this.state.authorizeAmount);
+    var amountInCogs = AGI.inCogs(web3, this.state.mpeAmount);
     
     this.onOpenchaining()
-    this.network.transactContractMethod(this, "approve", instanceTokenContract.approve, [this.network.getMPEAddress(this.state.chainId),amountInCogs], this.transactCallBack)
+    this.network.transactContractMethod(this, {operationName:"approve"}, instanceTokenContract.approve, [this.network.getMPEAddress(this.state.chainId),amountInCogs], this.transactCallBack)
   }
 
   handleDeposit() {
-    this.setState({contractError:''})
+    this.setState({mpeMessage:''})
     if (typeof web3 === undefined) {
       return;
     }
 
-    
     let instanceTokenContract = this.network.getTokenInstance(this.state.chainId);
     instanceTokenContract.allowance(web3.eth.defaultAccount, this.network.getMPEAddress(this.state.chainId), (err, allowedbalance) => {
-      var amountInCogs = AGI.inCogs(web3, this.state.depositAmount);
+      var amountInCogs = AGI.inCogs(web3, this.state.mpeAmount);
       if (Number(amountInCogs) > Number(allowedbalance)) {
-        this.setState({contractError: 'Deposit amount should be less than approved balance ' + allowedbalance});
+        this.setState({mpeMessage: 'Deposit amount should be less than approved balance ' + allowedbalance});
       }
       else {
         let instanceEscrowContract = this.network.getMPEInstance(this.state.chainId);
-        this.setState({contractError: ''})
+        this.setState({mpeMessage: ''})
         this.onOpenchaining()
-        this.network.transactContractMethod(this, "deposit", instanceEscrowContract.deposit, [amountInCogs], this.transactCallBack)
+        this.network.transactContractMethod(this, {operationName:"deposit"}, instanceEscrowContract.deposit, [amountInCogs], this.transactCallBack)
       }
     })
   }
   
   handleExpansion() {
-    this.setState({channelExtendAddError:''})
+    this.setState({channelExtendAddMessage:''})
   }
 
   handlewithdraw() {
-    this.setState({contractError:''})
+    this.setState({mpeMessage:''})
     if (typeof web3 === undefined) {
       return;
     }
 
-    var amountInCogs = AGI.inCogs(web3,this.state.withdrawalAmount);
+    var amountInCogs = AGI.inCogs(web3,this.state.mpeAmount);
     let instanceEscrowContract = this.network.getMPEInstance(this.state.chainId);
     this.onOpenchaining()
-    this.network.transactContractMethod(this, "withdraw", instanceEscrowContract.withdraw, [amountInCogs], this.transactCallBack)
+    this.network.transactContractMethod(this, {operationName:"withdraw"}, instanceEscrowContract.withdraw, [amountInCogs], this.transactCallBack)
   }
 
   handleChannelExtendAddFunds(data) {
-    this.setState({channelExtendAddError:''})
+    this.setState({channelExtendAddMessage:''})
     if (typeof web3 === undefined) {
       return;
     }
@@ -275,20 +269,20 @@ export class Profile extends Component {
     const channelID = data["channel_id"]
     const currentExpiryBlock = data["expiration"]
     if(this.state.extexp < currentExpiryBlock) {
-        this.processError("Expiry block number cannot be reduced. Previously provided value is " + currentExpiryBlock, "channelExtendAddError")
+        this.processError("Expiry block number cannot be reduced. Previously provided value is " + currentExpiryBlock, "channelExtendAddMessage")
         return;
     }
 
     this.network.getCurrentBlockNumber((blockNumber) => {
         if(this.state.extexp <= blockNumber) {
-            this.processError("Block number provided should be greater than current ethereum block number " + blockNumber, "channelExtendAddError")
+            this.processError("Block number provided should be greater than current ethereum block number " + blockNumber, "channelExtendAddMessage")
             return;
         }
 
         let instanceEscrowContract = this.network.getMPEInstance(this.state.chainId);
         var amountInCogs = AGI.inCogs(web3, this.state.extamount);
         this.onOpenchaining()
-        this.network.transactContractMethod(this, "channelExtendAndAddFunds", instanceEscrowContract.channelExtendAndAddFunds, [channelID, this.state.extexp, amountInCogs], this.transactCallBack)
+        this.network.transactContractMethod(this, {operationName:"channelExtendAndAddFunds"}, instanceEscrowContract.channelExtendAndAddFunds, [channelID, this.state.extexp, amountInCogs], this.transactCallBack)
     })
   }
 
@@ -379,12 +373,12 @@ export class Profile extends Component {
                                 </Tabs>
                                 {value === 0 &&
                                 <ProfileTabContainer>
-                                    <TextField id="standard-name" name="authorizeAmount" label={<span style={{ fontSize: "13px" }}>Amount</span>} margin="normal" onChange={this.handleAmountChange} value={this.state.authorizeAmount} style={{ width: "100%", fontWeight: "bold" }} onKeyPress={(e) => this.onKeyPressvalidator(e)} />
+                                    <TextField id="standard-name" name="mpeAmount" label={<span style={{ fontSize: "13px" }}>Amount</span>} margin="normal" onChange={this.handleAmountChange} value={this.state.mpeAmount} style={{ width: "100%", fontWeight: "bold" }} onKeyPress={(e) => this.onKeyPressvalidator(e)} />
                                         <br />
                                         <div className="row">
-                                            <div className="col-xs-6 col-sm-6 col-md-6" style={{ color: "red", fontSize: "14px" }}>{this.state.contractError!== '' ?ERROR_UTILS.sanitizeError(this.state.contractError):''}</div>
+                                            <div className="col-xs-6 col-sm-6 col-md-6" style={{ color: "red", fontSize: "14px" }}>{this.state.mpeMessage!== '' ?ERROR_UTILS.sanitizeError(this.state.mpeMessage):''}</div>
                                             <div className="col-xs-6 col-sm-6 col-md-6" style={{ textAlign: "right" }}>
-                                                {(typeof web3 !== 'undefined' && web3.eth.coinbase !== null && this.state.authorizeAmount > 0) ?
+                                                {(typeof web3 !== 'undefined' && web3.eth.coinbase !== null && this.state.mpeAmount > 0) ?
                                                 <Tooltip title={<span style={{ fontSize: "15px" }}>Authorize</span>} style={{ fontsize: "15px" }}>
                                                     <button className="btn btn-primary mtb-10 " onClick={this.handleAuthorize}><span>Authorize</span></button>
                                                 </Tooltip> :
@@ -394,12 +388,12 @@ export class Profile extends Component {
                                         </div>
                                 </ProfileTabContainer>} {value === 1 &&
                                 <ProfileTabContainer>
-                                    <TextField id="depositamt" label={<span style={{ fontSize: "13px" }}>Amount</span>} margin="normal" name="depositAmount" onChange={this.handleAmountChange} value={this.state.depositAmount} style={{ width: "100%", fontWeight: "bold" }} onKeyPress={(e) => this.onKeyPressvalidator(e)} />
+                                    <TextField id="depositamt" label={<span style={{ fontSize: "13px" }}>Amount</span>} margin="normal" name="mpeAmount" onChange={this.handleAmountChange} value={this.state.mpeAmount} style={{ width: "100%", fontWeight: "bold" }} onKeyPress={(e) => this.onKeyPressvalidator(e)} />
                                         <br />
                                         <div className="row">
-                                            <div className="col-xs-6 col-sm-6 col-md-6" style={{ color: "red", fontSize: "14px" }}>{this.state.contractError!== '' ?ERROR_UTILS.sanitizeError(this.state.contractError):''}</div>
+                                            <div className="col-xs-6 col-sm-6 col-md-6" style={{ color: "red", fontSize: "14px" }}>{this.state.mpeMessage!== '' ?ERROR_UTILS.sanitizeError(this.state.mpeMessage):''}</div>
                                             <div className="col-xs-6 col-sm-6 col-md-6" style={{ textAlign: "right" }}>
-                                                {(typeof web3 !== 'undefined' && web3.eth.coinbase !== null && this.state.depositAmount > 0) ?
+                                                {(typeof web3 !== 'undefined' && web3.eth.coinbase !== null && this.state.mpeAmount > 0) ?
                                                 <Tooltip title={<span style={{ fontSize: "15px" }}>Deposit</span>}>
                                                     <button className="btn btn-primary " onClick={this.handleDeposit}><span style={{ fontSize: "15px" }}>Deposit</span></button>
                                                 </Tooltip> :
@@ -407,15 +401,15 @@ export class Profile extends Component {
                                                 }
                                             </div>
                                         </div>
-                                        <p style={{ color: "red", fontSize: "14px" }}>{this.state.contractError}</p>
+                                        <p style={{ color: "red", fontSize: "14px" }}>{this.state.mpeMessage}</p>
                                 </ProfileTabContainer>} {value === 2 &&
                                 <ProfileTabContainer>
-                                    <TextField id="withdrawamt" label={<span style={{ fontSize: "13px" }}>Amount</span>} margin="normal" name="withdrawalAmount" onChange={this.handleAmountChange} value={this.state.withdrawalAmount} style={{ width: "100%", fontWeight: "bold" }} onKeyPress={(e) => this.onKeyPressvalidator(e)} />
+                                    <TextField id="withdrawamt" label={<span style={{ fontSize: "13px" }}>Amount</span>} margin="normal" name="mpeAmount" onChange={this.handleAmountChange} value={this.state.mpeAmount} style={{ width: "100%", fontWeight: "bold" }} onKeyPress={(e) => this.onKeyPressvalidator(e)} />
                                         <br />
                                         <div className="row">
-                                            <div className="col-xs-6 col-sm-6 col-md-6" style={{ color: "red", fontSize: "14px" }}>{this.state.contractError!== '' ?ERROR_UTILS.sanitizeError(this.state.contractError):''}</div>
+                                            <div className="col-xs-6 col-sm-6 col-md-6" style={{ color: "red", fontSize: "14px" }}>{this.state.mpeMessage!== '' ?ERROR_UTILS.sanitizeError(this.state.mpeMessage):''}</div>
                                             <div className="col-xs-6 col-sm-6 col-md-6" style={{ textAlign: "right" }}>
-                                                {(typeof web3 !== 'undefined' && web3.eth.coinbase !== null && this.state.withdrawalAmount > 0) ?
+                                                {(typeof web3 !== 'undefined' && web3.eth.coinbase !== null && this.state.mpeAmount > 0) ?
                                                 <Tooltip title={<span style={{ fontSize: "15px" }}>Withdraw</span>} >
                                                     <button type="button" className="btn btn-primary " onClick={this.handlewithdraw}><span style={{ fontSize: "15px" }}>Withdraw</span></button>
                                                 </Tooltip> :
@@ -515,7 +509,7 @@ export class Profile extends Component {
                                             </Tooltip>
                                             }
                                         </div>
-                                        <p style={{ color: "red", fontSize: "14px" }}>{this.state.channelExtendAddError!==''?ERROR_UTILS.sanitizeError(this.state.channelExtendAddError):''}</p>
+                                        <p style={{ color: "red", fontSize: "14px" }}>{this.state.channelExtendAddMessage!==''?ERROR_UTILS.sanitizeError(this.state.channelExtendAddMessage):''}</p>
                                     </div>
                                 </ExpansionPanelDetails>
                             </ExpansionPanel>
