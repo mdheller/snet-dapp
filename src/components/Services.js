@@ -159,7 +159,7 @@ class SampleServices extends React.Component {
     const url = this.network.getMarketplaceURL(chainId) + "service"
     const urlfetchservicestatus = this.network.getMarketplaceURL(chainId) + 'group-info'
     const urlfetchvote = this.network.getMarketplaceURL(chainId) + 'fetch-vote'
-    const fetchVoteBody = {user_address: web3.eth.coinbase}
+    const fetchVoteBody = {user_address: (typeof web3 === 'undefined')? "" : web3.eth.coinbase}
     console.log("Fetching data for " + chainId)
     Promise.all([Requests.get(url),Requests.get(urlfetchservicestatus),Requests.post(urlfetchvote,fetchVoteBody)])
     .then((values) =>

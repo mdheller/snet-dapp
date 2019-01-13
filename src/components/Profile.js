@@ -7,7 +7,7 @@ import ExpansionPanel from '@material-ui/core/ExpansionPanel';
 import ExpansionPanelSummary from '@material-ui/core/ExpansionPanelSummary';
 import ExpansionPanelDetails from '@material-ui/core/ExpansionPanelDetails';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
-import { AGI,ERROR_UTILS,DEFAULT_GAS_PRICE } from '../util';
+import { AGI,ERROR_UTILS } from '../util';
 import { Requests } from '../requests'
 import App from "../App.js";
 import Tooltip from '@material-ui/core/Tooltip';
@@ -30,7 +30,7 @@ export class Profile extends Component {
       agiBalance: 0,
       escrowaccountbalance: 0,
       allowedtokenbalance:[],
-      value: 0, //WHAT IS THIS FOR??
+      value: 0, 
       authorizeAmount: 0,
       depositAmount: 0,
       withdrawalAmount: 0,
@@ -130,7 +130,7 @@ export class Profile extends Component {
         console.log(err);
       }
       else {
-        this.setState({allowedtokenbalance: parseInt(allowedbalance)})
+        this.setState({allowedtokenbalance: allowedbalance})
       }
     });
   }
@@ -200,35 +200,19 @@ export class Profile extends Component {
     this.setState({[name]: value,})
   }
 
-  executeContractMethod(operation, err, estimatedGas, gasPrice, errorLabel, parameters) {
-    console.log("Operation " + operation + " " + estimatedGas + " gasPrice " + gasPrice);
-    if(err) {
-      this.processError(err,errorLabel);
-      return;
+  transactCallBack(caller, error, operationName) {
+    if(typeof error !== 'undefined') {
+        if(operationName === 'channelExtendAndAddFunds') {
+            caller.processError(error, "channelExtendAddError")
+        }
+        else {
+            caller.processError(error, "contractError")
+        }
     }
-    
-    parameters.push({
-      gas: estimatedGas,
-      gasPrice: gasPrice
-    });
-    parameters.push((error, txnHash) => {
-      if(error) {
-        this.processError(error, errorLabel)
-      }
-      else {
-        console.log("Txn Hash for approved transaction is : " + txnHash);
-        this.onOpenchaining();
-        this.network.waitForTransaction(txnHash).then(receipt => {
-            this.nextJobStep();
-            this.loadAGIBalances(this.state.chainId);
-          })
-          .catch((error) => {
-            this.processError(error, errorLabel)
-          })
-      }
-    });
-
-    operation.apply(this,parameters);
+    else {
+        caller.nextJobStep();
+        caller.loadAGIBalances(caller.state.chainId);        
+    }
   }
 
   handleAuthorize() {
@@ -239,15 +223,9 @@ export class Profile extends Component {
 
     let instanceTokenContract = this.network.getTokenInstance(this.state.chainId);
     var amountInCogs = AGI.inCogs(web3, this.state.authorizeAmount);
-
-    web3.eth.getGasPrice((err, gasPrice) => {
-      if(err) {
-        gasPrice = DEFAULT_GAS_PRICE;
-      }      
-      instanceTokenContract.approve.estimateGas(this.network.getMPEAddress(this.state.chainId),amountInCogs, (err, estimatedGas) => {
-        this.executeContractMethod(instanceTokenContract.approve, err, estimatedGas, gasPrice, "contractError", [this.network.getMPEAddress(this.state.chainId),amountInCogs]);
-      })
-    })
+    
+    this.onOpenchaining()
+    this.network.transactContractMethod(this, "approve", instanceTokenContract.approve, [this.network.getMPEAddress(this.state.chainId),amountInCogs], this.transactCallBack)
   }
 
   handleDeposit() {
@@ -256,6 +234,7 @@ export class Profile extends Component {
       return;
     }
 
+    
     let instanceTokenContract = this.network.getTokenInstance(this.state.chainId);
     instanceTokenContract.allowance(web3.eth.defaultAccount, this.network.getMPEAddress(this.state.chainId), (err, allowedbalance) => {
       var amountInCogs = AGI.inCogs(web3, this.state.depositAmount);
@@ -265,14 +244,8 @@ export class Profile extends Component {
       else {
         let instanceEscrowContract = this.network.getMPEInstance(this.state.chainId);
         this.setState({contractError: ''})
-        web3.eth.getGasPrice((err, gasPrice) => {
-          if(err) {
-            gasPrice = DEFAULT_GAS_PRICE;
-          }          
-          instanceEscrowContract.deposit.estimateGas(amountInCogs, (err, estimatedGas) => {
-            this.executeContractMethod(instanceEscrowContract.deposit, err, estimatedGas, gasPrice, "contractError", [amountInCogs]);
-          })
-        })
+        this.onOpenchaining()
+        this.network.transactContractMethod(this, "deposit", instanceEscrowContract.deposit, [amountInCogs], this.transactCallBack)
       }
     })
   }
@@ -289,15 +262,8 @@ export class Profile extends Component {
 
     var amountInCogs = AGI.inCogs(web3,this.state.withdrawalAmount);
     let instanceEscrowContract = this.network.getMPEInstance(this.state.chainId);
-
-    web3.eth.getGasPrice((err, gasPrice) => {
-      if(err) {
-        gasPrice = DEFAULT_GAS_PRICE;
-      }
-      instanceEscrowContract.withdraw.estimateGas(amountInCogs, (err, estimatedGas) => {
-        this.executeContractMethod(instanceEscrowContract.withdraw, err, estimatedGas, gasPrice, "contractError", [amountInCogs]);
-      })
-    })
+    this.onOpenchaining()
+    this.network.transactContractMethod(this, "withdraw", instanceEscrowContract.withdraw, [amountInCogs], this.transactCallBack)
   }
 
   handleChannelExtendAddFunds(data) {
@@ -321,14 +287,8 @@ export class Profile extends Component {
 
         let instanceEscrowContract = this.network.getMPEInstance(this.state.chainId);
         var amountInCogs = AGI.inCogs(web3, this.state.extamount);
-        web3.eth.getGasPrice((err, gasPrice) => {
-        if(err) {
-            gasPrice = DEFAULT_GAS_PRICE;
-        }      
-        instanceEscrowContract.channelExtendAndAddFunds.estimateGas(channelID, this.state.extexp, amountInCogs, (err, estimatedGas) => {
-            this.executeContractMethod(instanceEscrowContract.channelExtendAndAddFunds, err, estimatedGas, gasPrice, "channelExtendAddError", [channelID, this.state.extexp, amountInCogs]);
-            })
-        })
+        this.onOpenchaining()
+        this.network.transactContractMethod(this, "channelExtendAndAddFunds", instanceEscrowContract.channelExtendAndAddFunds, [channelID, this.state.extexp, amountInCogs], this.transactCallBack)
     })
   }
 
